@@ -1,0 +1,10 @@
+{
+  "name": "bank-statement-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local bank statement PDF to Excel analyzer.",
+  "scripts": {
+    "dev": "node app/dev-server.mjs",
+    "dev:open": "node app/dev-server.mjs --open"
+  }
+}

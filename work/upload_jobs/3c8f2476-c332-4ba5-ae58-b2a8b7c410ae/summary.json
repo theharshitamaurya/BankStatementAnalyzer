@@ -1,0 +1,11 @@
+{
+  "pdfs": 1,
+  "statements": 1,
+  "transactions": 398,
+  "issues": [],
+  "banks": [
+    "Bank of Baroda"
+  ],
+  "total_payments": 18129258.19,
+  "total_receipts": 17768567.19
+}

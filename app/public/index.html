@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bank PDF to Excel</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <div class="topbar">
+          <div>
+            <h1>Bank PDF to Excel</h1>
+            <p>Drop bank statement PDFs and generate the analysis workbook.</p>
+          </div>
+          <div class="badge">BETA</div>
+        </div>
+
+        <form id="uploadForm">
+          <label id="dropZone" class="drop-zone">
+            <input id="pdfInput" type="file" name="pdfs" accept="application/pdf,.pdf" multiple />
+            <span class="drop-icon">+</span>
+            <span class="drop-title">Drop PDFs here</span>
+            <span class="drop-copy">or click to choose files</span>
+          </label>
+
+          <div class="file-row">
+            <div>
+              <strong id="fileCount">No PDFs selected</strong>
+              <span id="fileNames"></span>
+            </div>
+            <button id="generateBtn" type="submit" disabled>Generate Excel</button>
+          </div>
+        </form>
+
+        <div id="status" class="status idle">Waiting for PDFs.</div>
+
+        <section id="result" class="result" hidden>
+          <div class="metrics">
+            <div>
+              <span>Statements</span>
+              <strong id="statementsMetric">0</strong>
+            </div>
+            <div>
+              <span>Transactions</span>
+              <strong id="transactionsMetric">0</strong>
+            </div>
+            <div>
+              <span>Receipts</span>
+              <strong id="receiptsMetric">0</strong>
+            </div>
+            <div>
+              <span>Payments</span>
+              <strong id="paymentsMetric">0</strong>
+            </div>
+          </div>
+          <a id="downloadLink" class="download" href="#">Download Excel</a>
+        </section>
+      </section>
+    </main>
+
+    <div id="loaderOverlay" class="loader-overlay hidden">
+      <div class="loader-card">
+        <div class="loader-spinner-container">
+          <div class="pulse-ring"></div>
+          <div class="loader-icon">📊</div>
+        </div>
+        <h2>Analyzing Statement</h2>
+        <p>Please wait while we digest your financial logs and structure the report.</p>
+        
+        <div class="status-ticker">
+          <span id="tickerText" class="ticker-text">Initializing secure parsing framework...</span>
+        </div>
+        
+        <div class="audit-metrics-grid">
+          <div class="audit-metric-card">
+            <span class="metric-label">Status</span>
+            <span id="auditMetricStatus" class="metric-val">Verifying Files</span>
+          </div>
+          <div class="audit-metric-card">
+            <span class="metric-label">Reconciliation</span>
+            <span id="auditMetricRecon" class="metric-val">Pending</span>
+          </div>
+          <div class="audit-metric-card">
+            <span class="metric-label">Processed Sheets</span>
+            <span id="auditMetricSheets" class="metric-val">0 / 15</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

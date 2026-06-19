@@ -1,0 +1,16 @@
+[
+  {
+    "file": "502 input.pdf",
+    "pages": 21,
+    "from": "2026-04-01",
+    "to": "2026-04-30",
+    "opening_balance": 0,
+    "dr_count": 115,
+    "cr_count": 283,
+    "debits": 18129258.19,
+    "credits": 17768567.19,
+    "closing_balance": 2500.0,
+    "bank": "Bank of Baroda",
+    "password_used": false
+  }
+]
