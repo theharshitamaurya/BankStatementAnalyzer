@@ -19,10 +19,7 @@ JOBS_DIR = WORKSPACE / "work" / "upload_jobs"
 OUTPUTS_DIR = WORKSPACE / "outputs"
 PYTHON_EXE = pathlib.Path(os.environ.get("HDFC_PYTHON_EXE", sys.executable))
 NODE_EXE = pathlib.Path(
-    os.environ.get(
-        "HDFC_NODE_EXE",
-        r"C:\Users\HP\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe",
-    )
+    os.environ.get("HDFC_NODE_EXE", "node")
 )
 
 
