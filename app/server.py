@@ -25,55 +25,7 @@ NODE_EXE = pathlib.Path(
     )
 )
 
-# def post_process_excel(output_path):
-#     try:
-#         import openpyxl
-#         from openpyxl.styles import Font
-#     except ImportError:
-#         print("openpyxl not found, skipping post processing")
-#         return
 
-#     try:
-#         wb = openpyxl.load_workbook(output_path)
-#         hyperlink_font = Font(name="Aptos", size=10, color="135E75", underline="single", bold=True)
-
-#         if "Dashboard" in wb.sheetnames:
-#             ws_dash = wb["Dashboard"]
-#             for r in range(16, 30):
-#                 cat_val = ws_dash.cell(row=r, column=1).value
-#                 if cat_val == "Recurring Transaction":
-#                     ws_dash.cell(row=r, column=7).value = '=HYPERLINK("#\'Detail Recurring Transaction\'!A1", "View Detail")'
-#                     ws_dash.cell(row=r, column=7).font = hyperlink_font
-#                 elif cat_val == "High Transaction":
-#                     ws_dash.cell(row=r, column=7).value = '=HYPERLINK("#\'Detail High Transaction\'!A1", "View Detail")'
-#                     ws_dash.cell(row=r, column=7).font = hyperlink_font
-
-#         for sheet_name in wb.sheetnames:
-#             if sheet_name.startswith("Detail "):
-#                 ws = wb[sheet_name]
-#                 ws["A1"].value = '=HYPERLINK("#\'Dashboard\'!A1", "← Return to Dashboard")'
-#                 ws["A1"].font = hyperlink_font
-                
-#                 link_col_idx = None
-#                 for c in range(1, ws.max_column + 1):
-#                     if ws.cell(row=4, column=c).value == "View Source Row":
-#                         link_col_idx = c
-#                         break
-                
-#                 if link_col_idx:
-#                     for r in range(5, ws.max_row + 1):
-#                         seq_val = ws.cell(row=r, column=1).value
-#                         if seq_val is not None:
-#                             try:
-#                                 target_row = int(seq_val) + 1
-#                                 ws.cell(row=r, column=link_col_idx).value = f'=HYPERLINK("#\'Transactions\'!A{target_row}", "View Source Row")'
-#                                 ws.cell(row=r, column=link_col_idx).font = hyperlink_font
-#                             except (ValueError, TypeError):
-#                                 pass
-
-#         wb.save(output_path)
-#     except Exception as exc:
-#         print(f"Error post-processing excel: {exc}")
 
 
 class HdfcHandler(BaseHTTPRequestHandler):
@@ -235,8 +187,17 @@ class HdfcHandler(BaseHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     {"error": "Excel generation failed.", "details": (build.stderr or build.stdout)[-2000:]},
                 )
+
+            # Add chart via openpyxl
+            chart_script = ROOT / "add_chart.py"
+            if chart_script.exists():
+                subprocess.run(
+                    [str(PYTHON_EXE), str(chart_script), str(output_path)],
+                    cwd=str(WORKSPACE),
+                    capture_output=True,
+                    text=True,
+                )
                 
-            post_process_excel(output_path)
 
             summary.update(
                 {

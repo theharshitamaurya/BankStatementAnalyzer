@@ -520,7 +520,7 @@ def classify(records):
             categories.append("UPI")
         if "LIC" in compact or "LIFEINSURANCE" in compact:
             categories.append("LIC")
-        if any(k in compact for k in ["EMI", "ECS", "ACHDR", "NACH", "LOAN", "INSTALMENT", "INSTALLMENT"]):
+        if record["direction"] == "Payment" and any(k in compact for k in ["EMI", "ECS", "ACHDR", "NACH", "LOAN", "INSTALMENT", "INSTALLMENT"]):
             categories.append("EMI")
         if "SALARY" in compact or "PAYROLL" in compact:
             categories.append("Salary")
