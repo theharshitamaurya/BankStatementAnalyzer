@@ -1,4 +1,7 @@
-import cgi
+try:
+    import cgi
+except ImportError:
+    import legacy_cgi as cgi
 import json
 import os
 import pathlib
@@ -212,7 +215,7 @@ class HdfcHandler(BaseHTTPRequestHandler):
 def main():
     port = int(os.environ.get("PORT", "8765"))
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(("127.0.0.1", port), HdfcHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), HdfcHandler)
     print(f"Bank PDF to Excel app running at http://127.0.0.1:{port}")
     server.serve_forever()
 
