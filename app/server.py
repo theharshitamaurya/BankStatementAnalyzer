@@ -34,23 +34,32 @@ class HdfcHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[{self.log_date_time_string()}] {fmt % args}")
 
+    def log_client_disconnect(self):
+        self.log_message("client disconnected before the response could be sent")
+
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            self.log_client_disconnect()
 
     def send_file(self, path, content_type, download_name=None):
         data = pathlib.Path(path).read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        if download_name:
-            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            if download_name:
+                self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            self.log_client_disconnect()
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -218,6 +227,8 @@ class HdfcHandler(BaseHTTPRequestHandler):
                 }
             )
             return self.send_json(HTTPStatus.OK, summary)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            self.log_client_disconnect()
         except Exception as exc:
             return self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
