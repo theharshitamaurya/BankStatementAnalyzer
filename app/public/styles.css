@@ -119,6 +119,40 @@ p {
   color: var(--muted);
 }
 
+.password-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.password-field span {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.password-field input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--ink);
+  font: inherit;
+  background: #fff;
+}
+
+.password-field input:focus {
+  outline: 2px solid #b7d5df;
+  outline-offset: 2px;
+  border-color: var(--primary);
+}
+
+.password-field small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .file-row {
   display: flex;
   align-items: center;

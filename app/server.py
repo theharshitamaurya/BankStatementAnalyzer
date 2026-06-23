@@ -122,6 +122,12 @@ class HdfcHandler(BaseHTTPRequestHandler):
             files = form["pdfs"] if "pdfs" in form else []
             if not isinstance(files, list):
                 files = [files]
+            statement_password = ""
+            if "statementPassword" in form:
+                password_field = form["statementPassword"]
+                if isinstance(password_field, list):
+                    password_field = password_field[0]
+                statement_password = (getattr(password_field, "value", "") or "").strip()
 
             saved = []
             for item in files:
@@ -139,17 +145,21 @@ class HdfcHandler(BaseHTTPRequestHandler):
                 return self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Please upload at least one PDF file."})
 
             summary_path = job_dir / "summary.json"
+            extract_command = [
+                str(PYTHON_EXE),
+                str(ROOT / "extract_bank.py"),
+                "--input-dir",
+                str(upload_dir),
+                "--work-dir",
+                str(data_dir),
+                "--summary-json",
+                str(summary_path),
+            ]
+            if statement_password:
+                extract_command.extend(["--password", statement_password])
+
             extract = subprocess.run(
-                [
-                    str(PYTHON_EXE),
-                    str(ROOT / "extract_bank.py"),
-                    "--input-dir",
-                    str(upload_dir),
-                    "--work-dir",
-                    str(data_dir),
-                    "--summary-json",
-                    str(summary_path),
-                ],
+                extract_command,
                 cwd=str(WORKSPACE),
                 capture_output=True,
                 text=True,

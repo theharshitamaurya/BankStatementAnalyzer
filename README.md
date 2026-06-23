@@ -6,6 +6,7 @@ Local web app for converting bank statement PDFs into an Excel analysis workbook
 
 - Upload one or more bank statement PDFs from the browser.
 - Supports many Indian bank statement layouts, including HDFC, Axis, IDFC First, IDBI, ICICI, DCB, Bank of Baroda, Bank of Maharashtra, Union Bank, Federal/Kotak-style layouts, and cooperative-bank layouts present in the sample data.
+- Supports password-protected statements by entering a password before generating.
 - Automatically reads statement passwords when the password is included in the filename, such as `PSW-76681350` or `PW-AMBI909233582`.
 - Generates an Excel workbook with:
   - Total receipts and payments
@@ -51,9 +52,11 @@ Local web app for converting bank statement PDFs into an Excel analysis workbook
 
 4. Drop/select PDF bank statements.
 
-5. Click **Generate Excel**.
+5. If the statements are password protected, enter the statement password.
 
-6. Download the generated workbook.
+6. Click **Generate Excel**.
+
+7. Download the generated workbook.
 
 ## Project Structure
 

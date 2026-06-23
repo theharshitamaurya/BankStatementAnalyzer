@@ -64,6 +64,10 @@ def extract_account_details(text):
                 ms_match2 = re.search(r"\bM/S\s+([A-Za-z0-9\s&.,'-]+)", text[:2000])
                 if ms_match2:
                     name = "M/S " + ms_match2.group(1).strip()
+        if not name and "Statement of Account No" in text[:2000]:
+            first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+            if first_line and not re.search(r"statement|account|customer|ifsc|micr", first_line, re.I):
+                name = first_line
 
     if name:
         name = name.split("Address :")[0].strip()
@@ -72,7 +76,7 @@ def extract_account_details(text):
         name = re.sub(r"\s+", " ", name).strip()
     
     acc_match = re.search(
-        r"(?:Account\s*No|AccountNo|A/C\s*Number|A/C\s*No|A/c\s*No|A/c\s*Number)\s*:?\s*(\d+)",
+        r"(?:Statement\s+of\s+Account\s+No|Account\s*No|AccountNo|A/C\s*Number|A/C\s*No|A/c\s*No|A/c\s*Number)\s*:?\s*(\d+)",
         text,
         re.I
     )
@@ -279,9 +283,13 @@ def build_hdfc_transactions(text, pdf_name, bank, st_from, st_to, opening_balanc
     return records
 
 
-def password_candidates(path):
+def password_candidates(path, manual_passwords=None):
     stem = pathlib.Path(path).stem
     candidates = [""]
+    for password in manual_passwords or []:
+        password = str(password).strip()
+        if password:
+            candidates.append(password)
     for pattern in [
         r"PW[-\s]*([A-Za-z0-9]+)",
         r"PSW[-\s]*([A-Za-z0-9]+)",
@@ -294,9 +302,9 @@ def password_candidates(path):
     return list(dict.fromkeys(candidates))
 
 
-def read_pdf_text(path):
+def read_pdf_text(path, manual_passwords=None):
     last_error = None
-    for password in password_candidates(path):
+    for password in password_candidates(path, manual_passwords):
         try:
             kwargs = {"password": password} if password else {}
             with pdfplumber.open(path, **kwargs) as pdf:
@@ -311,10 +319,10 @@ def detect_bank(text, filename):
     filename_upper = pathlib.Path(filename).name.upper()
     header_upper = text[:5000].upper()
     upper = f"{filename_upper}\n{header_upper}"
-    if "HDFC" in filename_upper or "HDFC BANK" in header_upper:
-        return "HDFC Bank"
     if "AXIS" in filename_upper or "AXIS BANK" in header_upper:
         return "Axis Bank"
+    if "HDFC" in filename_upper or "HDFC BANK" in header_upper:
+        return "HDFC Bank"
     if "ICICI" in filename_upper or re.search(r"\bICICI\s+BANK\b", header_upper):
         return "ICICI Bank"
     if "BANK OF BARODA" in filename_upper or "BANK OF BARODA" in header_upper:
@@ -559,7 +567,7 @@ def classify(records):
             )
 
 
-def extract(input_dir, work_dir):
+def extract(input_dir, work_dir, manual_passwords=None):
     pdfs = sorted(pathlib.Path(input_dir).glob("*.pdf"))
     if not pdfs:
         raise ValueError("No PDF files were uploaded.")
@@ -571,7 +579,7 @@ def extract(input_dir, work_dir):
 
     for pdf_path in pdfs:
         try:
-            text, pages, password = read_pdf_text(pdf_path)
+            text, pages, password = read_pdf_text(pdf_path, manual_passwords)
             bank = detect_bank(text, pdf_path.name)
             st_from, st_to = find_period(text)
             opening = extract_opening_balance(text)
@@ -674,6 +682,7 @@ def extract(input_dir, work_dir):
         "transactions": len(records),
         "issues": issues,
         "banks": sorted(set(s["bank"] for s in statements)),
+        "password_protected_statements": sum(1 for s in statements if s.get("password_used")),
         "total_payments": round(sum(r["withdrawal"] for r in records), 2),
         "total_receipts": round(sum(r["deposit"] for r in records), 2),
         "account_name": job_acc_name,
@@ -689,8 +698,14 @@ def main():
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--summary-json", required=True)
+    parser.add_argument(
+        "--password",
+        action="append",
+        default=[],
+        help="Optional statement password. Can be supplied more than once.",
+    )
     args = parser.parse_args()
-    summary = extract(args.input_dir, args.work_dir)
+    summary = extract(args.input_dir, args.work_dir, args.password)
     pathlib.Path(args.summary_json).write_text(json.dumps(summary, indent=2), encoding="utf-8")
     if summary["issues"]:
         print(json.dumps(summary, indent=2))

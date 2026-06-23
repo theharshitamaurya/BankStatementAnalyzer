@@ -1,5 +1,6 @@
 const form = document.querySelector("#uploadForm");
 const input = document.querySelector("#pdfInput");
+const statementPassword = document.querySelector("#statementPassword");
 const dropZone = document.querySelector("#dropZone");
 const fileCount = document.querySelector("#fileCount");
 const fileNames = document.querySelector("#fileNames");
@@ -128,6 +129,10 @@ form.addEventListener("submit", async (event) => {
       body.append("pdfs", file);
     }
   });
+  const password = statementPassword.value.trim();
+  if (password) {
+    body.append("statementPassword", password);
+  }
 
   generateBtn.disabled = true;
   result.hidden = true;
