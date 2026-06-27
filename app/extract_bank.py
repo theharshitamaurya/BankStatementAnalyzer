@@ -69,6 +69,12 @@ def extract_account_details(text):
             first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
             if first_line and not re.search(r"statement|account|customer|ifsc|micr", first_line, re.I):
                 name = first_line
+        if not name:
+            kotak_match = re.search(r"(?:\d{2}\s+[A-Za-z]{3}\s+\d{4}\s*-\s*\d{2}\s+[A-Za-z]{3}\s+\d{4})\n([^\n]+)", text, re.I)
+            if kotak_match:
+                candidate = kotak_match.group(1).strip()
+                if not re.search(r"account|statement|page", candidate, re.I):
+                    name = candidate
 
     if name:
         name = name.split("Address :")[0].strip()
@@ -77,7 +83,7 @@ def extract_account_details(text):
         name = re.sub(r"\s+", " ", name).strip()
     
     acc_match = re.search(
-        r"(?:Statement\s+of\s+Account\s+No|Account\s*No|AccountNo|A/C\s*Number|A/C\s*No|A/c\s*No|A/c\s*Number)\s*:?\s*(\d+)",
+        r"(?:Statement\s+of\s+Account\s+No|Account\s*No\.?|AccountNo|A/C\s*Number|A/C\s*No\.?|A/c\s*No\.?|A/c\s*Number)\s*:?\s*(\d+)",
         text,
         re.I
     )
@@ -320,6 +326,8 @@ def detect_bank(text, filename):
     filename_upper = pathlib.Path(filename).name.upper()
     header_upper = text[:5000].upper()
     upper = f"{filename_upper}\n{header_upper}"
+    if "KOTAK" in upper:
+        return "Kotak Mahindra Bank"
     if "AXIS" in filename_upper or "AXIS BANK" in header_upper:
         return "Axis Bank"
     if "HDFC" in filename_upper or "HDFC BANK" in header_upper:
@@ -390,6 +398,12 @@ def extract_opening_balance(text):
         if (match.group(2) or "").lower() == "dr":
             value = -value
         return value
+    match = re.search(r"Opening Balance[^\d]+(-?[\d,]+\.\d{2})(Cr|Dr)?", text, re.I)
+    if match:
+        value = parse_amount(match.group(1))
+        if (match.group(2) or "").lower() == "dr":
+            value = -value
+        return value
     match = re.search(r"Opening Balance\s+(-?[\d,]+\.\d{2})", text, re.I)
     if match:
         return parse_amount(match.group(1))
@@ -418,6 +432,80 @@ def extract_grand_totals(text):
         "credits": parse_amount(match.group(2)),
         "closing_balance": closing,
     }
+
+
+def build_kotak_transactions(text, pdf_name, bank, st_from, st_to, opening_balance, seq_start):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    txs = []
+    current = None
+    kotak_date_re = re.compile(r"^\d+\s+(\d{2}\s+[A-Za-z]{3}\s+\d{4})")
+    for line in lines:
+        if BOILER_RE.search(line):
+            continue
+        match = kotak_date_re.match(line)
+        if match:
+            if current:
+                txs.append(current)
+            current = {"line": line, "date": match.group(1), "continuation": []}
+        elif current:
+            current["continuation"].append(line)
+    if current:
+        txs.append(current)
+
+    records = []
+    balance = opening_balance
+    seq = seq_start
+    for tx in txs:
+        line = tx["line"]
+        amount_matches = list(AMOUNT_RE.finditer(line))
+        if len(amount_matches) < 2:
+            continue
+        closing = parse_amount(amount_matches[-1].group(0))
+        printed_amount = parse_amount(amount_matches[-2].group(0))
+        if balance is None:
+            balance = closing
+        delta = closing - balance
+        withdrawal = Decimal("0.00")
+        deposit = Decimal("0.00")
+        if money_close(delta, printed_amount):
+            deposit = printed_amount
+        elif money_close(delta, -printed_amount):
+            withdrawal = printed_amount
+        elif printed_amount < 0:
+            withdrawal = abs(printed_amount)
+        elif delta >= 0:
+            deposit = printed_amount
+        else:
+            withdrawal = printed_amount
+
+        raw_text = " ".join([line] + tx["continuation"])
+        date_match = re.search(r"\d{2}\s+[A-Za-z]{3}\s+\d{4}", raw_text)
+        cut = date_match.end() if date_match else 0
+        narration = raw_text[cut:]
+        for m in reversed(amount_matches):
+            narration = narration.replace(m.group(0), " ", 1)
+        narration = re.sub(r"\s+", " ", narration).strip(" -")
+        narration = re.sub(r"^\d+\s+", "", narration)
+
+        seq += 1
+        records.append({
+            "seq": seq,
+            "source_file": pdf_name,
+            "statement_from": st_from,
+            "statement_to": st_to,
+            "date": parse_any_date(tx["date"]),
+            "value_date": parse_any_date(tx["date"]),
+            "narration": narration[:500],
+            "reference": "",
+            "direction": "Receipt" if deposit > 0 else "Payment",
+            "withdrawal": to_float(withdrawal),
+            "deposit": to_float(deposit),
+            "amount": to_float(deposit if deposit > 0 else withdrawal),
+            "closing_balance": to_float(closing),
+            "bank": bank,
+        })
+        balance = closing
+    return records
 
 
 def build_transactions(text, pdf_name, bank, st_from, st_to, opening_balance, seq_start):
@@ -579,6 +667,8 @@ def process_single_pdf(pdf_path, manual_passwords):
         issues = []
         if bank == "HDFC Bank":
             file_records = build_hdfc_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0, issues)
+        elif bank == "Kotak Mahindra Bank":
+            file_records = build_kotak_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
         else:
             file_records = build_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
             
