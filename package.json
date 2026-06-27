@@ -7,10 +7,13 @@
     "node": ">=20"
   },
   "scripts": {
+    "start": "node app/server.mjs",
     "dev": "node app/dev-server.mjs",
     "dev:open": "node app/dev-server.mjs --open"
   },
   "dependencies": {
-    "exceljs": "4.4.0"
+    "exceljs": "4.4.0",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
   }
 }

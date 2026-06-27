@@ -21,13 +21,13 @@ const auditMetricRecon = document.getElementById("auditMetricRecon");
 const auditMetricSheets = document.getElementById("auditMetricSheets");
 
 const messages = [
-  "Initializing secure parsing framework...",
-  "Extracting transactional metadata...",
-  "Cross-referencing bank identifier formats...",
-  "Applying ML-based categorization heuristics...",
-  "Computing monthly velocity metrics...",
-  "Generating audit-ready Excel sheets...",
-  "Finalizing formatting and hyperlinking...",
+  "Initializing neural extraction framework...",
+  "Scanning PDF layer metadata...",
+  "Isolating tabular structures...",
+  "Applying ML categorization models...",
+  "Reconciling ledger hashes...",
+  "Assembling final Excel matrices...",
+  "Finalizing artifact generation..."
 ];
 
 let tickerInterval;
@@ -39,44 +39,36 @@ function startLoader() {
   
   messageIdx = 0;
   tickerText.textContent = messages[messageIdx];
-  tickerText.classList.remove("fade");
   
-  auditMetricStatus.textContent = "Verifying Files";
-  auditMetricRecon.textContent = "Pending";
-  auditMetricSheets.textContent = "0 / 15";
+  auditMetricStatus.textContent = "Booting";
+  auditMetricRecon.textContent = "Standby";
+  auditMetricSheets.textContent = "0/15";
   
   let ticks = 0;
-
   tickerInterval = setInterval(() => {
     ticks++;
-    
     if (ticks % 3 === 0) {
-      tickerText.classList.add("fade");
-      setTimeout(() => {
-        messageIdx = (messageIdx + 1) % messages.length;
-        tickerText.textContent = messages[messageIdx];
-        tickerText.classList.remove("fade");
-      }, 250);
+      messageIdx = (messageIdx + 1) % messages.length;
+      tickerText.textContent = messages[messageIdx];
     }
     
-    if (ticks === 2) auditMetricStatus.textContent = "Parsing Text";
-    if (ticks === 5) auditMetricStatus.textContent = "Categorizing";
-    if (ticks === 8) auditMetricStatus.textContent = "Building Excel";
-    if (ticks > 12) auditMetricStatus.textContent = "Optimizing UI";
+    if (ticks === 2) auditMetricStatus.textContent = "Extracting";
+    if (ticks === 5) auditMetricStatus.textContent = "Analyzing";
+    if (ticks === 8) auditMetricStatus.textContent = "Compiling";
+    if (ticks > 12) auditMetricStatus.textContent = "Finalizing";
     
-    if (ticks === 4) auditMetricRecon.textContent = "In Progress";
-    if (ticks === 10) auditMetricRecon.textContent = "Complete";
+    if (ticks === 4) auditMetricRecon.textContent = "Active";
+    if (ticks === 10) auditMetricRecon.textContent = "Verified";
     
-    if (ticks > 5 && ticks < 15) {
-      auditMetricSheets.textContent = `${Math.min(15, (ticks - 5) * 2)} / 15`;
-    }
-  }, 500);
+    // Instead of a fake counter, show an active state
+    auditMetricSheets.textContent = "Calculating...";
+  }, 600);
 }
 
 function stopLoader() {
   clearInterval(tickerInterval);
   loaderOverlay.classList.remove("visible");
-  setTimeout(() => loaderOverlay.classList.add("hidden"), 400);
+  setTimeout(() => loaderOverlay.classList.add("hidden"), 500);
 }
 
 function formatMoney(value) {
@@ -89,16 +81,16 @@ function formatMoney(value) {
 
 function setStatus(message, type = "idle") {
   statusBox.textContent = message;
-  statusBox.className = `status ${type}`;
+  statusBox.className = `status-banner ${type}`;
 }
 
 function updateFiles(files) {
   const pdfs = [...files].filter((file) => file.name.toLowerCase().endsWith(".pdf"));
   generateBtn.disabled = pdfs.length === 0;
-  fileCount.textContent = pdfs.length ? `${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"} selected` : "No PDFs selected";
+  fileCount.textContent = pdfs.length ? `${pdfs.length} Document${pdfs.length === 1 ? "" : "s"} Ready` : "No files selected";
   fileNames.textContent = pdfs.map((file) => file.name).join(", ");
   result.hidden = true;
-  setStatus(pdfs.length ? "Ready to generate." : "Waiting for PDFs.", "idle");
+  setStatus(pdfs.length ? "Engine ready for initialization." : "System ready. Awaiting input.", "idle");
 }
 
 input.addEventListener("change", () => updateFiles(input.files));
@@ -129,6 +121,7 @@ form.addEventListener("submit", async (event) => {
       body.append("pdfs", file);
     }
   });
+  
   const password = statementPassword.value.trim();
   if (password) {
     body.append("statementPassword", password);
@@ -136,30 +129,84 @@ form.addEventListener("submit", async (event) => {
 
   generateBtn.disabled = true;
   result.hidden = true;
-  setStatus("Reading PDFs and building Excel. This can take a little while.", "working");
-  startLoader();
+  setStatus("Commencing neural extraction sequence...", "working");
+  
+  loaderOverlay.classList.remove("hidden");
+  setTimeout(() => loaderOverlay.classList.add("visible"), 10);
+  
+  auditMetricStatus.textContent = "Booting engine...";
+  auditMetricRecon.textContent = "Standby";
+  auditMetricSheets.textContent = "Waiting...";
+  tickerText.textContent = "Uploading securely...";
 
   try {
     const response = await fetch("/api/generate", { method: "POST", body });
-    const payload = await response.json();
-    if (!response.ok) {
-      const detail = Array.isArray(payload.details)
-        ? payload.details.map((item) => `${item.file}: ${item.issue}`).join("; ")
-        : payload.details || payload.error;
-      throw new Error(detail || "Generation failed.");
+    if (!response.ok && !response.body) {
+       throw new Error("Server error " + response.status);
     }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
 
-    statementsMetric.textContent = payload.statements;
-    transactionsMetric.textContent = payload.transactions;
-    receiptsMetric.textContent = formatMoney(payload.total_receipts);
-    paymentsMetric.textContent = formatMoney(payload.total_payments);
-    downloadLink.href = payload.downloadUrl;
-    result.hidden = false;
-    setStatus("Excel workbook is ready.", "success");
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); 
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          
+          if (data.type === 'progress') {
+            if (data.message) {
+              tickerText.textContent = data.message;
+              auditMetricStatus.textContent = "Processing";
+            }
+            if (data.sheet) {
+              auditMetricStatus.textContent = `Building Sheet`;
+              auditMetricRecon.textContent = data.sheet;
+              auditMetricSheets.textContent = `${data.current} / ${data.total}`;
+            }
+          } 
+          else if (data.type === 'error') {
+            const detail = Array.isArray(data.details)
+              ? data.details.map((item) => `${item.file}: ${item.issue}`).join("; ")
+              : data.details || data.error;
+            throw new Error(detail || "Processing sequence failed.");
+          }
+          else if (data.type === 'done') {
+            const payload = data.payload;
+            statementsMetric.textContent = payload.statements;
+            transactionsMetric.textContent = payload.transactions;
+            receiptsMetric.textContent = formatMoney(payload.total_receipts);
+            paymentsMetric.textContent = formatMoney(payload.total_payments);
+            downloadLink.href = payload.downloadUrl;
+            
+            result.hidden = false;
+            setStatus("Analysis completed successfully. Artifact ready.", "success");
+          }
+        } catch (e) {
+          if (e.message !== "Unexpected end of JSON input") {
+             if (e.message !== "Processing sequence failed." && !e.message.includes("failed") && !e.message.includes("Error")) {
+                console.error("Parse error:", e);
+             } else {
+                throw e;
+             }
+          }
+        }
+      }
+    }
+    
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
-    stopLoader();
+    loaderOverlay.classList.remove("visible");
+    setTimeout(() => loaderOverlay.classList.add("hidden"), 500);
     generateBtn.disabled = input.files.length === 0;
   }
 });

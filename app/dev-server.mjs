@@ -18,11 +18,14 @@ function openBrowser() {
   }
 }
 
+const nodeExe = process.env.HDFC_NODE_EXE || "node";
+
 console.log(`Bank Statement Analyzer dev server`);
 console.log(`URL: ${url}`);
+console.log(`Node: ${nodeExe}`);
 console.log(`Python: ${pythonExe}`);
 
-const server = spawn(pythonExe, [path.join(root, "app", "server.py")], {
+const server = spawn(nodeExe, [path.join(root, "app", "server.mjs")], {
   cwd: root,
   env: {
     ...process.env,

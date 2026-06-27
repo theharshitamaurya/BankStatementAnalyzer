@@ -6,6 +6,7 @@ import pathlib
 import re
 from collections import Counter
 from decimal import Decimal
+import concurrent.futures
 
 import pdfplumber
 
@@ -567,6 +568,47 @@ def classify(records):
             )
 
 
+def process_single_pdf(pdf_path, manual_passwords):
+    try:
+        text, pages, password = read_pdf_text(pdf_path, manual_passwords)
+        bank = detect_bank(text, pdf_path.name)
+        st_from, st_to = find_period(text)
+        opening = extract_opening_balance(text)
+        grand_totals = extract_grand_totals(text)
+        
+        issues = []
+        if bank == "HDFC Bank":
+            file_records = build_hdfc_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0, issues)
+        else:
+            file_records = build_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
+            
+        if not file_records:
+            return {"success": False, "file": pdf_path.name, "issue": "no transactions parsed", "bank": bank}
+            
+        parsed_debits = round(sum(r["withdrawal"] for r in file_records), 2)
+        parsed_credits = round(sum(r["deposit"] for r in file_records), 2)
+        acc_name, acc_no = extract_account_details(text)
+        
+        statement = {
+            "file": pdf_path.name,
+            "pages": pages,
+            "from": st_from or min(r["date"] for r in file_records),
+            "to": st_to or max(r["date"] for r in file_records),
+            "opening_balance": to_float(opening) if opening is not None else 0,
+            "dr_count": sum(1 for r in file_records if r["withdrawal"] != 0),
+            "cr_count": sum(1 for r in file_records if r["deposit"] != 0),
+            "debits": to_float(grand_totals["debits"]) if grand_totals else parsed_debits,
+            "credits": to_float(grand_totals["credits"]) if grand_totals else parsed_credits,
+            "closing_balance": to_float(grand_totals["closing_balance"]) if grand_totals else file_records[-1]["closing_balance"],
+            "bank": bank,
+            "password_used": bool(password),
+            "account_name": acc_name,
+            "account_no": acc_no,
+        }
+        return {"success": True, "file": pdf_path.name, "records": file_records, "statement": statement, "issues": issues}
+    except Exception as exc:
+        return {"success": False, "file": pdf_path.name, "issue": f"could not read/parse PDF: {type(exc).__name__}"}
+
 def extract(input_dir, work_dir, manual_passwords=None):
     pdfs = sorted(pathlib.Path(input_dir).glob("*.pdf"))
     if not pdfs:
@@ -575,47 +617,33 @@ def extract(input_dir, work_dir, manual_passwords=None):
     records = []
     statements = []
     issues = []
-    seq = 0
 
+    # Process PDFs in parallel to massively speed up multi-file extraction
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = {executor.submit(process_single_pdf, pdf_path, manual_passwords): pdf_path for pdf_path in pdfs}
+        
+        # We need to maintain sequential order based on filenames for predictable sequence IDs later
+        results_by_file = {}
+        for future in concurrent.futures.as_completed(futures):
+            pdf_path = futures[future]
+            results_by_file[pdf_path.name] = future.result()
+            
+    seq = 0
     for pdf_path in pdfs:
-        try:
-            text, pages, password = read_pdf_text(pdf_path, manual_passwords)
-            bank = detect_bank(text, pdf_path.name)
-            st_from, st_to = find_period(text)
-            opening = extract_opening_balance(text)
-            grand_totals = extract_grand_totals(text)
-            if bank == "HDFC Bank":
-                file_records = build_hdfc_transactions(text, pdf_path.name, bank, st_from, st_to, opening, seq, issues)
-            else:
-                file_records = build_transactions(text, pdf_path.name, bank, st_from, st_to, opening, seq)
-            seq += len(file_records)
-            if not file_records:
-                issues.append({"file": pdf_path.name, "issue": "no transactions parsed", "bank": bank})
-                continue
-            parsed_debits = round(sum(r["withdrawal"] for r in file_records), 2)
-            parsed_credits = round(sum(r["deposit"] for r in file_records), 2)
-            acc_name, acc_no = extract_account_details(text)
-            statements.append(
-                {
-                    "file": pdf_path.name,
-                    "pages": pages,
-                    "from": st_from or min(r["date"] for r in file_records),
-                    "to": st_to or max(r["date"] for r in file_records),
-                    "opening_balance": to_float(opening) if opening is not None else 0,
-                    "dr_count": sum(1 for r in file_records if r["withdrawal"] != 0),
-                    "cr_count": sum(1 for r in file_records if r["deposit"] != 0),
-                    "debits": to_float(grand_totals["debits"]) if grand_totals else parsed_debits,
-                    "credits": to_float(grand_totals["credits"]) if grand_totals else parsed_credits,
-                    "closing_balance": to_float(grand_totals["closing_balance"]) if grand_totals else file_records[-1]["closing_balance"],
-                    "bank": bank,
-                    "password_used": bool(password),
-                    "account_name": acc_name,
-                    "account_no": acc_no,
-                }
-            )
-            records.extend(file_records)
-        except Exception as exc:
-            issues.append({"file": pdf_path.name, "issue": f"could not read/parse PDF: {type(exc).__name__}"})
+        res = results_by_file[pdf_path.name]
+        if not res["success"]:
+            issues.append({"file": res["file"], "issue": res["issue"], "bank": res.get("bank", "Unknown")})
+            continue
+            
+        file_records = res["records"]
+        # Update sequence numbers sequentially to maintain order
+        for r in file_records:
+            seq += 1
+            r["seq"] = seq
+            
+        statements.append(res["statement"])
+        records.extend(file_records)
+        issues.extend(res.get("issues", []))
 
     classify(records)
     records.sort(key=lambda row: (row["date"], row["seq"]))

@@ -3,12 +3,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import ExcelJS from "exceljs";
 
-const root = process.cwd();
-const workDir   = process.env.HDFC_WORK_DIR    || path.join(root, "work");
-const outputDir = process.env.HDFC_OUTPUT_DIR  || path.join(root, "outputs");
-const txCsvPath = path.join(workDir, "transactions.csv");
-const statementsPath = path.join(workDir, "statements.json");
-const outputPath = process.env.HDFC_OUTPUT_XLSX || path.join(outputDir, "bank_statement_analysis.xlsx");
+export async function buildWorkbook(options = {}, onProgress = null) {
+  const root = process.cwd();
+  const workDir   = options.workDir   || process.env.HDFC_WORK_DIR    || path.join(root, "work");
+  const outputDir = options.outputDir || process.env.HDFC_OUTPUT_DIR  || path.join(root, "outputs");
+  const txCsvPath = path.join(workDir, "transactions.csv");
+  const statementsPath = path.join(workDir, "statements.json");
+  const outputPath = options.outputPath || process.env.HDFC_OUTPUT_XLSX || path.join(outputDir, "bank_statement_analysis.xlsx");
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
 function parseCsv(text) {
@@ -207,11 +208,20 @@ const catSum = REQ_CATS.map(([label,match]) => ({ label, match, ...catStats(matc
 const wb     = new ExcelJS.Workbook();
 wb.calcProperties = { fullCalcOnLoad:true };
 
+const totalSheets = 5 + DETAIL_CATS.length + 2; // Dashboard, CatSum, CatDet, Month, Tx, Checks, Sources + DetailSheets
+let currentSheet = 0;
+const report = (name) => {
+  currentSheet++;
+  if (onProgress) onProgress(name, currentSheet, totalSheets);
+};
+
 const wsDash   = wb.addWorksheet('Dashboard');
 const wsCat    = wb.addWorksheet('Category Summary');
 const wsCatD   = wb.addWorksheet('Category Details');
 const wsMonth  = wb.addWorksheet('Monthly Summary');
 const wsTx     = wb.addWorksheet('Transactions');
+
+report('Transactions');
 
 // ══ Transactions ══════════════════════════════════════════════════════════════
 wsTx.showGridLines = false;
@@ -231,6 +241,7 @@ widths(wsTx, [8,16,14,14,12,12,44,18,12,14,14,14,16,28,12,18,...FLAG_CATS.map(()
 const detailNames = [];
 for (const [label, match] of DETAIL_CATS) {
   const wsName = sheetNameForDetail(label);
+  report(wsName);
   detailNames.push(wsName);
   const ws = wb.addWorksheet(wsName);
   ws.showGridLines = false;
@@ -274,12 +285,15 @@ for (const [label, match] of DETAIL_CATS) {
 }
 
 // ══ Checks + Sources placeholders ════════════════════════════════════════════
+report('Checks');
 const wsChk = wb.addWorksheet('Checks');
+report('Sources');
 const wsSrc = wb.addWorksheet('Sources');
 wsChk.showGridLines = false;
 wsSrc.showGridLines = false;
 
 // ══ Monthly Summary ════════════════════════════════════════════════════════════
+report('Monthly Summary');
 wsMonth.showGridLines = false;
 wsMonth.views = [{ state:'frozen', ySplit:1 }];
 hdrRow(wsMonth, 1, ['Month Key','From','To','Period','Transactions','Opening Balance',
@@ -299,6 +313,7 @@ for (let i = 0; i < monthlyData.length; i++) {
 widths(wsMonth, [16,12,12,12,8,16,10,10,15,15,16,15,15,14,14]);
 
 // ══ Category Summary ══════════════════════════════════════════════════════════
+report('Category Summary');
 wsCat.showGridLines = false;
 wsCat.views = [{ state:'frozen', ySplit:1 }];
 hdrRow(wsCat, 1, ['Requested Category','Match Term','Receipt Count','Receipts',
@@ -328,6 +343,7 @@ for (let i = 0; i < catSum.length; i++) {
 widths(wsCat, [30,26,14,15,14,15,15,44]);
 
 // ══ Category Details index ════════════════════════════════════════════════════
+report('Category Details');
 wsCatD.showGridLines = false;
 wsCatD.views = [{ state:'frozen', ySplit:3 }];
 title(wsCatD, 1, 'Category Details', 1, 8);
@@ -385,6 +401,7 @@ for (let i = 0; i < statements.length; i++) {
 widths(wsSrc, [18,14,14,8,60]);
 
 // ══ Dashboard ══════════════════════════════════════════════════════════════════
+report('Dashboard');
 wsDash.showGridLines = false;
 
 // Row 1: title A:N
@@ -473,10 +490,12 @@ if (process.env.HDFC_SKIP_PREVIEWS !== '1') {
   }
 }
 
-console.log(JSON.stringify({
-  outputPath,
-  transactions: txRows.length,
-  statements:   statements.length,
-  totalPayments: totPay,
-  totalReceipts: totRec,
-}, null, 2));
+  return {
+    outputPath,
+    sheetCount: totalSheets,
+    transactions: txRows.length,
+    statements:   statements.length,
+    totalPayments: totPay,
+    totalReceipts: totRec,
+  };
+}

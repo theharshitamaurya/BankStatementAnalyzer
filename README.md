@@ -62,7 +62,7 @@ Local web app for converting bank statement PDFs into an Excel analysis workbook
 
 - `package.json` - npm scripts for running the local app
 - `app\dev-server.mjs` - npm dev-server wrapper
-- `app\server.py` - local backend server
+- `app\server.mjs` - high-performance Node.js backend server
 - `app\extract_bank.py` - PDF extraction and bank parsing logic
 - `app\build_hdfc_workbook.mjs` - Excel workbook generator
 - `app\public\index.html` - frontend page
