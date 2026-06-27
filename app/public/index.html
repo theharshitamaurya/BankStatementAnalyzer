@@ -53,16 +53,22 @@
           </div>
         </label>
 
-        <div class="input-group">
-          <label for="statementPassword">Encryption Password <span class="optional-tag">Optional</span></label>
-          <div class="input-wrapper">
-            <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-            <input id="statementPassword" type="password" name="statementPassword" autocomplete="off"
-              placeholder="Required only if PDFs are manually encrypted" />
+        <div id="fileListContainer" class="file-list-container" hidden>
+          <div class="file-list-header">
+            <h3>Uploaded statements</h3>
+            <p>Enter a password for each PDF if it is protected.</p>
+          </div>
+          <div class="file-table">
+            <div class="file-table-head">
+              <div class="col-id">#</div>
+              <div class="col-file">FILE</div>
+              <div class="col-size">SIZE</div>
+              <div class="col-pwd">PDF PASSWORD</div>
+              <div class="col-action"></div>
+            </div>
+            <div id="fileTableBody" class="file-table-body">
+              <!-- Dynamically populated -->
+            </div>
           </div>
         </div>
 
@@ -159,6 +165,17 @@
         <span id="tickerText" class="ticker-text">Initializing runtime...</span>
       </div>
 
+      <!-- Real-Time Progress Bar -->
+      <div id="pdfProgressContainer" class="progress-container hidden">
+        <div class="progress-header">
+          <span class="progress-label">Data Extraction</span>
+          <span id="pdfProgressText" class="progress-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="pdfProgressBar" class="progress-fill"></div>
+        </div>
+      </div>
+
       <div class="live-metrics">
         <div class="live-metric">
           <span class="lm-label">Engine</span>
@@ -167,10 +184,6 @@
         <div class="live-metric">
           <span class="lm-label">Recon Matrix</span>
           <span id="auditMetricRecon" class="lm-val text-purple">Standby</span>
-        </div>
-        <div class="live-metric">
-          <span class="lm-label">Data Sheets</span>
-          <span id="auditMetricSheets" class="lm-val text-green">0/15</span>
         </div>
       </div>
     </div>

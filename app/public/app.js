@@ -1,6 +1,5 @@
 const form = document.querySelector("#uploadForm");
 const input = document.querySelector("#pdfInput");
-const statementPassword = document.querySelector("#statementPassword");
 const dropZone = document.querySelector("#dropZone");
 const fileCount = document.querySelector("#fileCount");
 const fileNames = document.querySelector("#fileNames");
@@ -18,7 +17,6 @@ const loaderOverlay = document.getElementById("loaderOverlay");
 const tickerText = document.getElementById("tickerText");
 const auditMetricStatus = document.getElementById("auditMetricStatus");
 const auditMetricRecon = document.getElementById("auditMetricRecon");
-const auditMetricSheets = document.getElementById("auditMetricSheets");
 
 const messages = [
   "Initializing neural extraction framework...",
@@ -42,7 +40,6 @@ function startLoader() {
   
   auditMetricStatus.textContent = "Booting";
   auditMetricRecon.textContent = "Standby";
-  auditMetricSheets.textContent = "0/15";
   
   let ticks = 0;
   tickerInterval = setInterval(() => {
@@ -59,9 +56,6 @@ function startLoader() {
     
     if (ticks === 4) auditMetricRecon.textContent = "Active";
     if (ticks === 10) auditMetricRecon.textContent = "Verified";
-    
-    // Instead of a fake counter, show an active state
-    auditMetricSheets.textContent = "Calculating...";
   }, 600);
 }
 
@@ -84,13 +78,71 @@ function setStatus(message, type = "idle") {
   statusBox.className = `status-banner ${type}`;
 }
 
+let selectedFiles = [];
+
+function renderFileList() {
+  const container = document.getElementById('fileListContainer');
+  const tbody = document.getElementById('fileTableBody');
+  
+  if (selectedFiles.length === 0) {
+    container.hidden = true;
+    generateBtn.disabled = true;
+    fileCount.textContent = "No files selected";
+    fileNames.textContent = "";
+    setStatus("System ready. Awaiting input.", "idle");
+    return;
+  }
+  
+  container.hidden = false;
+  generateBtn.disabled = false;
+  fileCount.textContent = `${selectedFiles.length} Document${selectedFiles.length === 1 ? "" : "s"} Ready`;
+  fileNames.textContent = selectedFiles.map(f => f.name).join(", ");
+  setStatus("Engine ready for initialization.", "idle");
+  
+  tbody.innerHTML = '';
+  selectedFiles.forEach((file, index) => {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    
+    row.innerHTML = `
+      <div class="col-id">${index + 1}</div>
+      <div class="col-file">
+        <span class="pdf-badge">PDF</span>
+        ${file.name}
+      </div>
+      <div class="col-size">${sizeMb} MB</div>
+      <div class="col-pwd">
+        <input type="text" class="pwd-input" placeholder="Optional" data-index="${index}" />
+      </div>
+      <div class="col-action">
+        <button type="button" class="btn-remove" data-index="${index}" title="Remove file">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+    `;
+    
+    tbody.appendChild(row);
+  });
+  
+  document.querySelectorAll('.btn-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.index);
+      selectedFiles.splice(idx, 1);
+      renderFileList();
+    });
+  });
+}
+
 function updateFiles(files) {
   const pdfs = [...files].filter((file) => file.name.toLowerCase().endsWith(".pdf"));
-  generateBtn.disabled = pdfs.length === 0;
-  fileCount.textContent = pdfs.length ? `${pdfs.length} Document${pdfs.length === 1 ? "" : "s"} Ready` : "No files selected";
-  fileNames.textContent = pdfs.map((file) => file.name).join(", ");
-  result.hidden = true;
-  setStatus(pdfs.length ? "Engine ready for initialization." : "System ready. Awaiting input.", "idle");
+  pdfs.forEach(newFile => {
+     if (!selectedFiles.find(f => f.name === newFile.name && f.size === newFile.size)) {
+        selectedFiles.push(newFile);
+     }
+  });
+  renderFileList();
 }
 
 input.addEventListener("change", () => updateFiles(input.files));
@@ -107,25 +159,25 @@ dropZone.addEventListener("dragleave", () => {
 dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropZone.classList.remove("dragover");
-  input.files = event.dataTransfer.files;
-  updateFiles(input.files);
+  updateFiles(event.dataTransfer.files);
 });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!input.files.length) return;
+  if (!selectedFiles.length) return;
 
   const body = new FormData();
-  [...input.files].forEach((file) => {
-    if (file.name.toLowerCase().endsWith(".pdf")) {
-      body.append("pdfs", file);
-    }
+  selectedFiles.forEach((file) => {
+    body.append("pdfs", file);
   });
   
-  const password = statementPassword.value.trim();
-  if (password) {
-    body.append("statementPassword", password);
-  }
+  const pwdInputs = document.querySelectorAll('.pwd-input');
+  pwdInputs.forEach(input => {
+    const pwd = input.value.trim();
+    if (pwd) {
+      body.append("statementPassword", pwd);
+    }
+  });
 
   generateBtn.disabled = true;
   result.hidden = true;
@@ -136,7 +188,6 @@ form.addEventListener("submit", async (event) => {
   
   auditMetricStatus.textContent = "Booting engine...";
   auditMetricRecon.textContent = "Standby";
-  auditMetricSheets.textContent = "Waiting...";
   tickerText.textContent = "Uploading securely...";
 
   try {
@@ -167,10 +218,25 @@ form.addEventListener("submit", async (event) => {
               tickerText.textContent = data.message;
               auditMetricStatus.textContent = "Processing";
             }
+            if (data.pdf_progress) {
+              const { current, total } = data.pdf_progress;
+              const pct = Math.round((current / total) * 100);
+              
+              const pCont = document.getElementById("pdfProgressContainer");
+              const pBar = document.getElementById("pdfProgressBar");
+              const pText = document.getElementById("pdfProgressText");
+              
+              pCont.classList.remove("hidden");
+              pBar.style.width = `${pct}%`;
+              pText.textContent = `${pct}%`;
+            }
             if (data.sheet) {
               auditMetricStatus.textContent = `Building Sheet`;
               auditMetricRecon.textContent = data.sheet;
-              auditMetricSheets.textContent = `${data.current} / ${data.total}`;
+              
+              // Hide progress bar once excel generation starts
+              const pCont = document.getElementById("pdfProgressContainer");
+              if (pCont) pCont.classList.add("hidden");
             }
           } 
           else if (data.type === 'error') {
@@ -207,6 +273,6 @@ form.addEventListener("submit", async (event) => {
   } finally {
     loaderOverlay.classList.remove("visible");
     setTimeout(() => loaderOverlay.classList.add("hidden"), 500);
-    generateBtn.disabled = input.files.length === 0;
+    generateBtn.disabled = selectedFiles.length === 0;
   }
 });

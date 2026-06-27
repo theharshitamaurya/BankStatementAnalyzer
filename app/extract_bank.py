@@ -624,9 +624,10 @@ def extract(input_dir, work_dir, manual_passwords=None):
         
         # We need to maintain sequential order based on filenames for predictable sequence IDs later
         results_by_file = {}
-        for future in concurrent.futures.as_completed(futures):
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
             pdf_path = futures[future]
             results_by_file[pdf_path.name] = future.result()
+            print(json.dumps({"type": "progress", "message": f"Extracting data from PDFs...", "pdf_progress": {"current": i, "total": len(pdfs)}}), flush=True)
             
     seq = 0
     for pdf_path in pdfs:

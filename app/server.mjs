@@ -119,11 +119,37 @@ app.post('/api/generate', upload.array('pdfs'), async (req, res) => {
       '--work-dir', dataDir,
       '--summary-json', summaryPath
     ];
-    if (statementPassword) {
-      extractArgs.push('--password', statementPassword);
+    
+    const pwdsRaw = req.body.statementPassword || [];
+    const pwdsArr = Array.isArray(pwdsRaw) ? pwdsRaw : [pwdsRaw];
+    const pwds = pwdsArr.flatMap(p => p.split(',')).map(s => s.trim()).filter(Boolean);
+    for (const pwd of pwds) {
+      extractArgs.push('--password', pwd);
     }
 
-    const extract = await runCommand(PYTHON_EXE, extractArgs, { cwd: WORKSPACE });
+    const extract = await new Promise((resolve) => {
+      const child = spawn(PYTHON_EXE, extractArgs, { cwd: WORKSPACE });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (data) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed && parsed.type === 'progress') {
+              sendEvent(parsed);
+            }
+          } catch(e) {}
+        }
+      });
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+    });
     
     let summary = {};
     if (existsSync(summaryPath)) {
