@@ -606,9 +606,44 @@ def build_transactions(text, pdf_name, bank, st_from, st_to, opening_balance, se
     return records
 
 
+FD_INTEREST_RE = re.compile(r"\b(?:INT|INTEREST)\b", re.I)
+FD_RE = re.compile(
+    r"\b(?:"
+    r"F\.?\s*D\.?|FDR|FIXED\s*DEPOSIT|TERM\s*DEPOSIT|TDR|"
+    r"FD\s*(?:NO|A/C|AC|ACCOUNT|OPEN|CLOS(?:E|URE|ING)?|MATUR(?:ITY|ED)?|"
+    r"RENEW(?:AL|ED)?|BOOK(?:ING|ED)?|DEP(?:OSIT)?|INT(?:EREST)?|RECEIPT|LIEN)"
+    r")\b",
+    re.I,
+)
+MUTUAL_FUND_RE = re.compile(r"\b(?:MUTUAL\s+FUND|MF|SIP|REDEMPTION|CAP\s+FUND)\b", re.I)
+PF_RE = re.compile(r"\b(?:PPF|EPF|PF|PROVIDENT\s+FUND)\b", re.I)
+SALARY_RE = re.compile(r"\b(?:SALARY|PAYROLL)\b", re.I)
+
+
 def classify(records):
-    for record in records:
-        compact = re.sub(r"\s+", "", record["narration"].upper())
+    def has_salary_marker(record):
+        return bool(SALARY_RE.search(record["narration"]))
+
+    def has_split_salary_context(index):
+        record = records[index]
+        if record["direction"] != "Receipt" or record["amount"] < 10000:
+            return False
+        for neighbor_index in (index - 1, index + 1):
+            if neighbor_index < 0 or neighbor_index >= len(records):
+                continue
+            neighbor = records[neighbor_index]
+            if (
+                neighbor.get("date") == record.get("date")
+                and neighbor.get("direction") == "Payment"
+                and neighbor.get("amount", 0) <= 1000
+                and has_salary_marker(neighbor)
+            ):
+                return True
+        return False
+
+    for index, record in enumerate(records):
+        narration = record["narration"]
+        compact = re.sub(r"\s+", "", narration.upper())
         amount_abs = abs(record["amount"])
         categories = []
         if any(k in compact for k in ["CASHDEPOSIT", "CASHRECEIPT", "BYCASH", "CASHDEP", "CASH"]):
@@ -619,15 +654,17 @@ def classify(records):
             categories.append("LIC")
         if record["direction"] == "Payment" and any(k in compact for k in ["EMI", "ECS", "ACHDR", "NACH", "LOAN", "INSTALMENT", "INSTALLMENT"]):
             categories.append("EMI")
-        if "SALARY" in compact or "PAYROLL" in compact:
+        if record["direction"] == "Receipt" and (has_salary_marker(record) or has_split_salary_context(index)):
             categories.append("Salary")
-        if any(k in compact for k in ["FD", "FDR", "FIXEDDEPOSIT", "TDR", "TERMDEPOSIT"]) and any(
-            k in compact for k in ["INT", "INTEREST"]
-        ):
+        is_mutual_fund = bool(MUTUAL_FUND_RE.search(narration))
+        is_fd = bool(FD_RE.search(narration)) and not is_mutual_fund
+        if is_fd and FD_INTEREST_RE.search(narration):
             categories.append("FD interest")
-        elif any(k in compact for k in ["FD", "FDR", "FIXEDDEPOSIT", "TDR", "TERMDEPOSIT"]):
+        elif is_fd:
             categories.append("FD Deposit/Withdrawal")
-        if any(k in compact for k in ["PPF", "EPF", "PROVIDENTFUND"]) or re.search(r"(?<!U)PF", compact):
+        if is_mutual_fund:
+            categories.append("Mutual Fund / Investment")
+        if PF_RE.search(narration):
             categories.append("PPF/PF interest/contribution")
         if amount_abs >= 100000:
             categories.append("High Transaction")
