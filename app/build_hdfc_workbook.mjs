@@ -109,6 +109,7 @@ function hdrRow(ws, rowNum, headers) {
 }
 function widths(ws, arr) { arr.forEach((w,i) => { ws.getColumn(i+1).width = w; }); }
 function money(cell) { cell.numFmt = MONEY_FMT; }
+function integer(cell) { cell.numFmt = '#,##0'; }
 function date(cell)  { cell.numFmt = DATE_FMT; }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -155,6 +156,7 @@ const REQ_CATS = [
   ['Salary','Salary'],
   ['High Transaction','High Transaction'],
   ['UPI','UPI'],
+  ['IMPS','IMPS'],
   ['LIC','LIC'],
   ['Mutual Fund / Investment','Mutual Fund / Investment'],
   ['FD interest','FD interest'],
@@ -171,6 +173,7 @@ const DETAIL_CATS = [
   ['High Transaction','High Transaction'],
   ['Total Receipts and Payments',''],
   ['UPI','UPI'],
+  ['IMPS','IMPS'],
   ['LIC','LIC'],
   ['Mutual Fund / Investment','Mutual Fund / Investment'],
   ['FD interest','FD interest'],
@@ -327,7 +330,7 @@ const catNotes = [
   'Keyword based: EMI/ECS/ACH/loan/installment.',
   'Keyword based: salary.',
   'Transactions with absolute amount at or above Rs 100,000.',
-  'Keyword based: UPI.','Keyword based: LIC.',
+  'Keyword based: UPI.','Keyword based: IMPS.','Keyword based: LIC.',
   'Keyword based: mutual fund/investment receipt or payment.',
   'Keyword based: FD plus interest/int.',
   'Keyword based: FD/fixed deposit/TDR/term deposit.',
@@ -340,6 +343,7 @@ for (let i = 0; i < catSum.length; i++) {
     r.getCell(ci+1).value = v;
   });
   r.eachCell({ includeEmpty:true }, body);
+  [3,5].forEach(ci => integer(r.getCell(ci)));
   [4,6,7].forEach(ci => money(r.getCell(ci)));
   r.getCell(8).alignment = { vertical:'top', wrapText:true };
 }
@@ -359,6 +363,7 @@ for (let i = 0; i < DETAIL_CATS.length; i++) {
   [label, sheetNameForDetail(label), rowsFor(match).length,
    recCount,recAmt,payCount,payAmt,net].forEach((v,ci) => { r.getCell(ci+1).value=v; });
   r.eachCell({ includeEmpty:true }, body);
+  [3,4,6].forEach(ci => integer(r.getCell(ci)));
   [5,7,8].forEach(ci => money(r.getCell(ci)));
 }
 widths(wsCatD, [34,32,10,14,15,14,15,15]);
@@ -424,7 +429,10 @@ for (let i = 0; i < summaryData.length; i++) {
 }
 
 // Rows 7-13: key metrics A (highlight label) + B (money value)
-const c0=catSum[0], c1=catSum[1], c2=catSum[2], c3=catSum[3], c4=catSum[4], c5=catSum[5], c6=catSum[6], c7=catSum[7];
+const catByLabel = Object.fromEntries(catSum.map(c => [c.label, c]));
+const c0 = catByLabel.Total, c1 = catByLabel.Cash, c2 = catByLabel['Recurring Transaction'];
+const c3 = catByLabel.EMI, c4 = catByLabel.Salary, c5 = catByLabel['High Transaction'];
+const cUpi = catByLabel.UPI, cImps = catByLabel.IMPS, cLic = catByLabel.LIC;
 const metrics = [
   ['Total Receipts',              c0.recAmt],
   ['Total Payments',              c0.payAmt],
@@ -432,7 +440,7 @@ const metrics = [
   ['Cash Receipts',               c1.recAmt],
   ['High Transaction Value',      Math.round((c5.recAmt-c5.payAmt)*100)/100],
   ['Recurring Transaction Value', Math.round((c2.recAmt-c2.payAmt)*100)/100],
-  ['UPI / LIC / EMI / Salary',    Math.round((c6.net+c7.net+c3.net+c4.net)*100)/100],
+  ['UPI / IMPS / LIC / EMI / Salary', Math.round((cUpi.net+cImps.net+cLic.net+c3.net+c4.net)*100)/100],
 ];
 for (let i = 0; i < metrics.length; i++) {
   const lc = wsDash.getCell(7+i, 1); lc.value = metrics[i][0]; hilight(lc);
@@ -449,7 +457,8 @@ for (let i = 0; i < catSum.length; i++) {
   const r = wsDash.getRow(16+i);
   [label, recCount, recAmt, payCount, payAmt, net].forEach((v,ci) => {
     const c = r.getCell(ci+1); c.value=v; body(c);
-    if (ci>=2 && ci<=5) money(c);
+    if ([1,3].includes(ci)) integer(c);
+    if ([2,4,5].includes(ci)) money(c);
   });
   // Link cell — apply body first so borders/fill are set, then override font
   const lc = r.getCell(7);

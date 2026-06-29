@@ -78,7 +78,17 @@ FD_RE = re.compile(
     re.I,
 )
 MUTUAL_FUND_RE = re.compile(r"\b(?:MUTUAL\s+FUND|MF|SIP|REDEMPTION|CAP\s+FUND)\b", re.I)
-PF_RE = re.compile(r"\b(?:PPF|EPF|PF|PROVIDENT\s+FUND)\b", re.I)
+LIC_RE = re.compile(r"\b(?:LIC|LIFE\s+INSURANCE)\b", re.I)
+PF_RE = re.compile(
+    r"\b(?:"
+    r"PUBLIC\s+PROVIDENT\s+FUND|PROVIDENT\s+FUND|EPF|"
+    r"PPF\s*(?:A/C|AC|ACCOUNT|CONTRIBUTION|DEPOSIT|INTEREST|INT|SUBSCRIPTION|"
+    r"TRANSFER|MATURITY|WITHDRAWAL|LOAN)|"
+    r"PF\s*(?:CONTRIBUTION|INTEREST|TRANSFER|CLAIM|WITHDRAWAL|SETTLEMENT|"
+    r"EMPLOYEE|EMPLOYER)"
+    r")\b",
+    re.I,
+)
 SALARY_RE = re.compile(r"\b(?:SALARY|PAYROLL)\b", re.I)
 
 
@@ -115,7 +125,9 @@ def classify(records):
             categories.append("Cash")
         if "UPI" in compact:
             categories.append("UPI")
-        if "LIC" in compact:
+        if "IMPS" in compact:
+            categories.append("IMPS")
+        if LIC_RE.search(narration):
             categories.append("LIC")
         if any(k in compact for k in ["EMI", "ECS", "ACHDR", "LOAN", "INSTALMENT", "INSTALLMENT"]):
             categories.append("EMI")
