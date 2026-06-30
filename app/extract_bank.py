@@ -240,7 +240,6 @@ def build_hdfc_transactions(text, pdf_name, bank, st_from, st_to, opening_balanc
             issues.append({"file": pdf_name, "issue": "could not find HDFC amounts", "line": line})
             continue
 
-        printed_amount = parse_amount(amount_matches[-2].group(0))
         closing = parse_amount(amount_matches[-1].group(0))
         if balance is None:
             balance = closing
@@ -250,22 +249,27 @@ def build_hdfc_transactions(text, pdf_name, bank, st_from, st_to, opening_balanc
         continuation = clean_hdfc_continuation(tx["cont"])
         full_narration = re.sub(r"\s+", " ", f"{narration} {continuation}".strip()).strip(" .-")
 
-        delta = closing - balance
-        if printed_amount < 0:
-            withdrawal = abs(printed_amount)
-            deposit = Decimal("0.00")
-        elif money_close(delta, printed_amount):
-            deposit = printed_amount
-            withdrawal = Decimal("0.00")
-        elif money_close(delta, -printed_amount):
-            withdrawal = printed_amount
-            deposit = Decimal("0.00")
-        elif delta >= 0:
-            deposit = printed_amount
-            withdrawal = Decimal("0.00")
+        if len(amount_matches) >= 3:
+            withdrawal = parse_amount(amount_matches[-3].group(0))
+            deposit = parse_amount(amount_matches[-2].group(0))
         else:
-            withdrawal = printed_amount
-            deposit = Decimal("0.00")
+            printed_amount = parse_amount(amount_matches[-2].group(0))
+            delta = closing - balance
+            if printed_amount < 0:
+                withdrawal = abs(printed_amount)
+                deposit = Decimal("0.00")
+            elif money_close(delta, printed_amount):
+                deposit = printed_amount
+                withdrawal = Decimal("0.00")
+            elif money_close(delta, -printed_amount):
+                withdrawal = printed_amount
+                deposit = Decimal("0.00")
+            elif delta >= 0:
+                deposit = printed_amount
+                withdrawal = Decimal("0.00")
+            else:
+                withdrawal = printed_amount
+                deposit = Decimal("0.00")
 
         seq += 1
         records.append(
@@ -340,6 +344,8 @@ def detect_bank(text, filename):
         return "IDBI Bank"
     if "KOTAK" in upper:
         return "Kotak Mahindra Bank"
+    if "JANA SMALL" in upper or "JANA" in filename_upper:
+        return "Jana Small Finance Bank"
     if "AXIS BANK" in header_upper:
         return "Axis Bank"
     if "HDFC BANK" in header_upper:
@@ -559,7 +565,10 @@ def build_transactions(text, pdf_name, bank, st_from, st_to, opening_balance, se
         if len(nums) >= 3:
             maybe_debit, maybe_credit = nums[-3], nums[-2]
             if maybe_debit != 0 or maybe_credit != 0:
-                debit, credit = maybe_debit, maybe_credit
+                if bank == "Jana Small Finance Bank":
+                    debit, credit = maybe_credit, maybe_debit
+                else:
+                    debit, credit = maybe_debit, maybe_credit
 
         if debit == 0 and credit == 0:
             amount = nums[-2]
