@@ -326,28 +326,34 @@ def detect_bank(text, filename):
     filename_upper = pathlib.Path(filename).name.upper()
     header_upper = text[:5000].upper()
     upper = f"{filename_upper}\n{header_upper}"
+    
+    if "KOTAK" in filename_upper: return "Kotak Mahindra Bank"
+    if "HDFC" in filename_upper: return "HDFC Bank"
+    if "AXIS" in filename_upper: return "Axis Bank"
+    if "ICICI" in filename_upper: return "ICICI Bank"
+    if "IDBI" in filename_upper: return "IDBI Bank"
+    if "IDFC" in filename_upper: return "IDFC First Bank"
+    if "FEDERAL" in filename_upper: return "Federal Bank"
+    if "UNION" in filename_upper: return "Union Bank"
+
+    if "IDBI BANK" in header_upper:
+        return "IDBI Bank"
     if "KOTAK" in upper:
         return "Kotak Mahindra Bank"
-    if "AXIS" in filename_upper or "AXIS BANK" in header_upper:
+    if "AXIS BANK" in header_upper:
         return "Axis Bank"
-    if "HDFC" in filename_upper or "HDFC BANK" in header_upper:
+    if "HDFC BANK" in header_upper:
         return "HDFC Bank"
-    if "ICICI" in filename_upper or re.search(r"\bICICI\s+BANK\b", header_upper):
+    if re.search(r"\bICICI\s+BANK\b", header_upper):
         return "ICICI Bank"
-    if "BANK OF BARODA" in filename_upper or "BANK OF BARODA" in header_upper:
+    if "BANK OF BARODA" in header_upper:
         return "Bank of Baroda"
-    if "IDFC FIRST" in upper:
+    if "IDFC FIRST" in upper or "IDFB" in upper:
         return "IDFC First Bank"
-    if "IDFB" in upper:
-        return "IDFC First Bank"
-    if "AXIS BANK" in upper or "UTIB" in upper:
+    if "UTIB" in upper:
         return "Axis Bank"
-    if "ICICI" in upper:
-        return "ICICI Bank"
     if "DCB BANK" in upper:
         return "DCB Bank"
-    if "IDBI BANK" in upper:
-        return "IDBI Bank"
     if "FEDERAL BANK" in upper or "FDRL" in upper:
         return "Federal Bank"
     if "UNION BANK" in upper or "UBIN" in upper:
@@ -705,10 +711,124 @@ def classify(records):
             )
 
 
+
+def build_idbi_transactions(text, pdf_name, bank, st_from, st_to, opening_balance, seq_start):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    txs = []
+    current = None
+    pending = []
+
+    for line in lines:
+        if BOILER_RE.search(line):
+            continue
+        if DATE_START_RE.match(line):
+            if current:
+                txs.append(current)
+            current = {"line": line, "continuation": []}
+        elif current:
+            current["continuation"].append(line)
+    if current:
+        txs.append(current)
+
+    records = []
+    balance = opening_balance
+    seq = seq_start
+
+    for tx in txs:
+        raw_text = " ".join([tx["line"]] + tx["continuation"])
+        
+        date_matches = list(DATE_TOKEN_RE.finditer(tx["line"]))
+        if not date_matches:
+            continue
+        tx_date = parse_any_date(date_matches[0].group(0))
+        value_date = parse_any_date(date_matches[1].group(0)) if len(date_matches) > 1 else tx_date
+        
+        amount_matches = list(AMOUNT_RE.finditer(raw_text))
+        if len(amount_matches) < 2:
+            continue
+            
+        closing = parse_amount(amount_matches[-1].group(0))
+        amount = parse_amount(amount_matches[-2].group(0))
+        
+        debit = Decimal("0.00")
+        credit = Decimal("0.00")
+        
+        upper = raw_text.upper()
+        credit_words = ["CR", "REC", "RECEIPT", "DEPOSIT", "BY CASH", "CASH RECEIPT", "NEFT/", "UPI/CR"]
+        debit_words = ["DR", "PAY", "WDL", "WITHDRAW", "CHARG", "GST", "POS", "DEBIT", "FT - DR"]
+        
+        if any(w in upper for w in credit_words) and not any(w in upper for w in [" DR", "/DR/", "FT - DR"]):
+            credit = amount
+        elif any(w in upper for w in debit_words):
+            debit = amount
+        else:
+            credit = amount
+            
+        cut = date_matches[-1].end() if date_matches else 0
+        narration = raw_text[cut:]
+        for m in reversed(amount_matches):
+            narration = narration.replace(m.group(0), " ", 1)
+        narration = re.sub(r"(?:Dr|Cr)", " ", narration, flags=re.I)
+        narration = re.sub(r"\s+", " ", narration).strip(" -")
+        if not narration:
+            narration = re.sub(r"\s+", " ", raw_text).strip()
+
+        seq += 1
+        records.append(
+            {
+                "seq": seq,
+                "source_file": pdf_name,
+                "statement_from": st_from,
+                "statement_to": st_to,
+                "date": tx_date,
+                "value_date": value_date,
+                "narration": narration[:500],
+                "reference": "",
+                "withdrawal": to_float(debit),
+                "deposit": to_float(credit),
+                "amount": to_float(credit if credit > 0 else debit),
+                "closing_balance": to_float(closing),
+                "bank": bank,
+            }
+        )
+        
+    if len(records) > 1 and records[0]["date"] > records[-1]["date"]:
+        records.reverse()
+        
+    for i in range(len(records)):
+        r = records[i]
+        prev_bal = balance if i == 0 else Decimal(str(records[i-1]["closing_balance"]))
+        closing = Decimal(str(r["closing_balance"]))
+        amount = Decimal(str(r["amount"]))
+        if prev_bal is not None:
+            delta = closing - prev_bal
+            if money_close(delta, amount):
+                r["deposit"] = float(amount)
+                r["withdrawal"] = 0.0
+            elif money_close(delta, -amount):
+                r["withdrawal"] = float(amount)
+                r["deposit"] = 0.0
+            elif amount < 0:
+                r["withdrawal"] = float(abs(amount))
+                r["deposit"] = 0.0
+                r["amount"] = float(abs(amount))
+            elif delta >= 0:
+                r["deposit"] = float(amount)
+                r["withdrawal"] = 0.0
+            else:
+                r["withdrawal"] = float(amount)
+                r["deposit"] = 0.0
+        r["direction"] = "Receipt" if r["deposit"] > 0 else "Payment"
+        balance = closing
+        
+    return records
+
+
 def process_single_pdf(pdf_path, manual_passwords):
     try:
         text, pages, password = read_pdf_text(pdf_path, manual_passwords)
         bank = detect_bank(text, pdf_path.name)
+        print(json.dumps({"type": "progress", "message": f"DEBUG: Detected {bank} for {pdf_path.name}"}), flush=True)
         st_from, st_to = find_period(text)
         opening = extract_opening_balance(text)
         grand_totals = extract_grand_totals(text)
@@ -718,9 +838,15 @@ def process_single_pdf(pdf_path, manual_passwords):
             file_records = build_hdfc_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0, issues)
         elif bank == "Kotak Mahindra Bank":
             file_records = build_kotak_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
+        elif bank == "IDBI Bank":
+            file_records = build_idbi_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
         else:
             file_records = build_transactions(text, pdf_path.name, bank, st_from, st_to, opening, 0)
             
+        import sys
+        sys.stderr.write(f"DEBUG: Detected {bank} for {pdf_path.name}\n")
+        print(json.dumps({"type": "progress", "message": f"DEBUG: Parsed {len(file_records)} records"}), flush=True)
+        sys.stderr.write(f"DEBUG: Parsed {len(file_records)} records\n")
         if not file_records:
             return {"success": False, "file": pdf_path.name, "issue": "no transactions parsed", "bank": bank}
             
