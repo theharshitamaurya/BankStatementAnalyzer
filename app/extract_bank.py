@@ -633,7 +633,7 @@ PF_RE = re.compile(
     r")\b",
     re.I,
 )
-SALARY_RE = re.compile(r"\b(?:SALARY|PAYROLL)\b", re.I)
+SALARY_RE = re.compile(r"\b(?:SALARY|PAYROLL|PENSION)\b", re.I)
 
 
 def classify(records):
